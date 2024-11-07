@@ -23,8 +23,8 @@ def fed_args():
     parser.add_argument('-nc', '--sys-n_client', type=int, required=True, help='Number of the clients')
     parser.add_argument('-nuc', '--sys-n_unlearning_client', type=int, required=True, help='Index of unlearning client')
     parser.add_argument('-ck', '--sys-n_local_class', type=int, required=True, help='Number of the classes in each client')
-    parser.add_argument('-ds', '--sys-dataset', type=str, required=True, help='Dataset name, one of the following four datasets: MNIST, CIFAR-10, fashion, SVHN')
-    parser.add_argument('-md', '--sys-model', type=str, required=True, help='Model name')
+    parser.add_argument('-ds', '--sys-dataset', type=str, required=True, help='Dataset name, one of the following four datasets: mnist, cifar10, fashion, ')
+    parser.add_argument('-md', '--sys-model', type=str, required=True, help='Model name, only cnn')
     parser.add_argument('-nr', '--sys-n_rounds', type=int, required=True, help='Number of rounds')
     parser.add_argument('-ne', '--sys-n_epochs', type=int, required=True, help='Number of epochs')
     parser.add_argument('-dir', '--sys-dir', type=str, required=True, help='Directory of the results: if result file not exists it will be create')
@@ -48,8 +48,23 @@ def create_cnn_model(only_digits=True, seed=1):
     return model
 
 
-def fedavg(server_model, server_x_test, server_y_test, clients_x_train, clients_y_train, num_rounds=1, epochs=1, num_clients=10, retrained=False, unlearning_client=1, result_file_dir="."):
-    
+def fedavg(server_model, server_x_test, server_y_test, clients_x_train, clients_y_train, num_rounds=1, epochs=1, 
+           num_clients=10, retrained=False, unlearning_client=1, result_file_dir="."):
+    """
+    Method to run fedAVG algorithm
+    :param server_model: 
+    :param server_x_test: x_test dataset of the server
+    :param server_y_test: y_test dataset of the server
+    :param clients_x_train: Array off all x_train dataset of all clients
+    :param clients_y_train: Array off all y_train datest of all clients
+    :param num_rounds: Total number of FedAvg's round
+    :param epochs: Number of train epochs
+    :param num_clients: Total number of client
+    :param retrained: Flag to indicate if server_model is the original or the retrained
+    :param unlearning_client: Index of the unlearning_client
+    :param result_file_dir: 
+    :return: Server_model updated
+    """
     
     print("Server model - Initial evaluate")
     test_loss, test_accuracy,sparse_categorical_crossentropy = server_model.evaluate(server_x_test, server_y_test)
@@ -73,13 +88,12 @@ def fedavg(server_model, server_x_test, server_y_test, clients_x_train, clients_
     
     for round in range(num_rounds):
         print(f"Start federated training - round: {round}")
-        #new_global_weights = np.zeros_like(server_model.get_weights(), dtype=object)
         new_global_weights = [np.zeros_like(ww) for ww in server_model.get_weights()]
 
         print("Select ", len(random_client_indexs), " clients")
+        
         # fedAvg algorithm
         for index in random_client_indexs:
-            # temp_global_weights = np.zeros_like(server_model.get_weights(), dtype=object)
             client_x_train = clients_x_train[index]
             client_y_train = clients_y_train[index]
 
@@ -105,12 +119,21 @@ def fedavg(server_model, server_x_test, server_y_test, clients_x_train, clients_
 
 
 def client_update(server_model, client_index, client_x_train, client_y_train, round=0, epochs=1):
-    
+    """
+    Method to update the client model
+    :param server_model:
+    :param client_index: index of the current client
+    :param clients_x_train: Array off all x_train dataset of all clients
+    :param clients_y_train: Array off all y_train datest of all clients
+    :param round: Number of the current round
+    :param epochs: Number of train epochs
+    :return: Client model's weights and the lenght of his dataset
+    """
+
     print(f"Update client {client_index} - round: {round}")
     client_model = create_cnn_model()
     client_model.predict(np.random.random((1, 28, 28, 1)))
     loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-    # qui occhio a usare sparse_categorical_accuracy perchè non prederebbe from_logits=True
     client_model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy'])
     client_model.set_weights(server_model.get_weights())
 
@@ -150,21 +173,16 @@ def divide_data(num_client=1, num_local_class=10, dataset_name='emnist', i_seed=
         train_data = (train_data - mean) / std
         test_data = (test_data - mean) / std
 
-        train_targets = train_targets.flatten() #reshape(-1,)#  #bidimensional array -> unidimensional array
-        test_targets = test_targets.flatten() #reshape(-1,)#
+        train_targets = train_targets.flatten()
+        test_targets = test_targets.flatten()
     if not dataset_name=="cifar10":
         # (28, 28) -> (28, 28, 1)
         train_data = tf.expand_dims(train_data, axis=-1)
         test_data = tf.expand_dims(test_data, axis=-1)
     x_test = test_data
     y_test = test_targets
-    #server_x_train = train_data
-    #server_y_train = train_targets
     print("x_train shape: ", train_data[0].shape)
 
-    #num_classes, train_data, train_targets, test_data, test_targets = load_data()
-
-    # import pdb; pdb.set_trace()
     if num_local_class == -1:
         num_local_class = num_classes
     assert 0 < num_local_class <= num_classes, "number of local class should smaller than global number of class"
@@ -189,9 +207,8 @@ def divide_data(num_client=1, num_local_class=10, dataset_name='emnist', i_seed=
             config_class['f_{0:05d}'.format(i)].append(cls)
 
     for cls in config_division.keys():
-        indexes = tf.where(tf.equal(train_targets, cls)) #torch.nonzero(train_targets == cls)
+        indexes = tf.where(tf.equal(train_targets, cls))
         num_datapoint = indexes.shape[0]
-        #indexes = tf.random.shuffle(indexes) #indexes[torch.randperm(num_datapoint)]
         num_partition = num_datapoint // config_division[cls]
         for i_partition in range(config_division[cls]):
             if i_partition == config_division[cls] - 1:
@@ -203,17 +220,16 @@ def divide_data(num_client=1, num_local_class=10, dataset_name='emnist', i_seed=
         user_data_indexes = tf.constant([], dtype=tf.int64, shape=[0, 1])
         for cls in config_class[user]:
             user_data_index = config_data[cls][1][config_data[cls][0]]
-            user_data_indexes = tf.concat([user_data_indexes, user_data_index],axis=0) #torch.cat((user_data_indexes, user_data_index))
+            user_data_indexes = tf.concat([user_data_indexes, user_data_index],axis=0)
             config_data[cls][0] += 1
-        #user_data_indexes = user_data_indexes.squeeze().int().tolist()
         user_data_indexes = tf.squeeze(user_data_indexes)
         print(user_data_indexes.shape)
         user_data_indexes = tf.cast(user_data_indexes, dtype=tf.int64)
         user_data_indexes = user_data_indexes.numpy().tolist()
 
         
-        user_data = tf.gather(train_data, user_data_indexes) #user_data = Subset(trainset, user_data_indexes)
-        user_targets = tf.gather(train_targets, user_data_indexes) #user_targets = trainset.target[user_data_indexes.tolist()]
+        user_data = tf.gather(train_data, user_data_indexes)
+        user_targets = tf.gather(train_targets, user_data_indexes)
         
         trainset_config['users'].append(user)
         trainset_config['user_data'][user] = {'x': user_data, 'y': user_targets}
@@ -226,25 +242,18 @@ def divide_data(num_client=1, num_local_class=10, dataset_name='emnist', i_seed=
     x_train_clients = []
     y_train_clients = []
     for client_id in trainset_config['users']:
-      # print("Update dimensions")
       if dataset_name=="mnist" or  dataset_name=="fashion":
-        #shape (1,28,28,1) -> (28,28,1)
         trainset_config['user_data'][client_id]["x"] = tf.squeeze(trainset_config['user_data'][client_id]["x"])
         trainset_config['user_data'][client_id]["x"] = tf.expand_dims(trainset_config['user_data'][client_id]["x"], axis=-1)
       else:
-        #shape (1,32,32,3) -> (32,32,3)
         print(trainset_config['user_data'][client_id]["x"][1].shape, trainset_config['user_data'][client_id]["y"][1].shape)
         trainset_config['user_data'][client_id]["x"] = tf.squeeze(trainset_config['user_data'][client_id]["x"])
         print(trainset_config['user_data'][client_id]["x"][1].shape, trainset_config['user_data'][client_id]["y"][1].shape)
-        #trainset_config['user_data'][client_id]["x"] = [tf.reshape(tensor, (32, 32, 3)) for tensor in trainset_config['user_data'][client_id]["x"]]
 
       x_trainset = tf.convert_to_tensor(trainset_config['user_data'][client_id]["x"])
       y_trainset = tf.convert_to_tensor(trainset_config['user_data'][client_id]["y"])
       x_train_clients.append(x_trainset)
       y_train_clients.append(y_trainset)
-
-      #print("x_train_clients", x_trainset.shape)
-      #print("y_train_clients", y_trainset.shape)
 
 
     return x_train_clients, y_train_clients, x_test, y_test
@@ -255,30 +264,33 @@ def main():
     
     # If no GPUs are avaible, the CPU is automatically used
     with tf.device('/GPU:0'):
-
-        # main
-        #NUM_ROUNDS = 5
-        #EPOCHS = 1
-        #NUM_LOCAL_CLASSES = 5
-        #UNLEARNING_CLIENT = 1
-
+        
         args = fed_args()
         
         num_clients = args.sys_n_client
         unlearning_client = args.sys_n_unlearning_client
-        num_local_classes = args.sys_n_local_class #10: IID, 2: NON-IID
+        num_local_classes = args.sys_n_local_class
         dataset_name = args.sys_dataset
         model_name = args.sys_model
         num_rounds = args.sys_n_rounds
         num_epochs = args.sys_n_epochs
         result_file_dir = args.sys_dir
 
+        avaible_datasets = ["mnist", "fashion", "cifar10"]
+        if dataset_name not in avaible_datasets:
+            raise Exception(f"Dataset not avaible. Select one between of {avaible_datasets}")
+        
+        avaible_models = ["cnn"]
+        if model_name not in avaible_models:
+            raise Exception(f"Model not avaible. Select one between of {avaible_models}")
+
         write_results(result_file_dir, f"\nResult for {dataset_name} using {model_name}:\n")
         write_results(result_file_dir, f"Num_clients {num_clients}, num_local_classes {num_local_classes}, num_round {num_rounds},"\
                       f" unlearning_client {unlearning_client}, num_epoch {num_epochs}\n")
 
         # prepare data
-        x_train, y_train, x_test, y_test = divide_data(num_client=10, num_local_class=num_local_classes, dataset_name=dataset_name, i_seed=0, num_classes=10)
+        x_train, y_train, x_test, y_test = divide_data(num_client=num_clients, num_local_class=num_local_classes, dataset_name=dataset_name, 
+                                                       i_seed=0, num_classes=10)
 
         print(f"Composition of client datasets")
         for i in range(len(y_train)):
@@ -290,10 +302,8 @@ def main():
         original_model = create_cnn_model()
         original_model.predict(np.random.random((1, 28, 28, 1)))
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-
-        # qui occhio a usare sparse_categorical_accuracy perchè non preNderebbe from_logits=True
         original_model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy', tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)])
-        # original_model.fit(server_x_train, server_y_train, epochs=num_epochs)
+
         original_model = fedavg(original_model,
                                 x_test,
                                 y_test,
@@ -306,15 +316,14 @@ def main():
                                 result_file_dir=result_file_dir
                                 )
 
+        
         # retrained model training
         print("Retrained Model Training")
         retrained_model = create_cnn_model()
         retrained_model.predict(np.random.random((1, 28, 28, 1)))
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-
-        # qui occhio a usare sparse_categorical_accuracy perchè non prederebbe from_logits=True
         retrained_model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy', tf.keras.metrics.SparseCategoricalCrossentropy(from_logits=True)])
-        # original_model.fit(server_x_train, server_y_train, epochs=num_epochs)
+        
         retrained_model = fedavg(retrained_model,
                                 x_test,
                                 y_test,
@@ -326,11 +335,11 @@ def main():
                                 unlearning_client=unlearning_client,
                                 result_file_dir=result_file_dir
                                 )
+        print("Save original_model and retrained_model in current directory")
         name = f"original_model_{unlearning_client}.keras"
         original_model.save(name)
         name = f"retrained_model_{unlearning_client}.keras"
         retrained_model.save(name)
-        return
         
    
 if __name__ == "__main__":
@@ -339,5 +348,10 @@ if __name__ == "__main__":
 """
 USAGE:
 - python3 fedAVG.py -nc 10 -nuc 1 -ck 5 -ds fashion -md cnn -nr 5 -ne 1 -dir .
- python3 fedAVG.py -nc 10 -nuc 3 -ck 5 -ds fashion -md cnn -nr 5 -ne 1 -dir .  
+- python3 fedAVG.py -nc 10 -nuc 3 -ck 5 -ds fashion -md cnn -nr 5 -ne 1 -dir .  
 """
+
+#NUM_ROUNDS = 5
+#EPOCHS = 1
+#NUM_LOCAL_CLASSES = 5
+#UNLEARNING_CLIENT = 1
