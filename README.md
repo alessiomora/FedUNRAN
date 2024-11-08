@@ -1,4 +1,5 @@
 # FedUNRAN
+This is the official repository for "FedUNRAN: On-device Federated Unlearning via Random Labels" by Alessio Mora, Luca Dominici, Paolo Bellavista.
 
 ## Requirements
 To run this project, you'll need:
@@ -7,7 +8,7 @@ To run this project, you'll need:
 * Tensorflow 
 
 ## Installation
-To install the required libraries, you can use pip:
+To install the required libraries, you can use pip inside your py virtual environment:
 
 ```shell
 pip install tensorflow
