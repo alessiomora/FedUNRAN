@@ -1,0 +1,4 @@
+tensorflow==2.15.0
+numpy==1.26.4
+pytorch==2.2.1
+scikit-learn==1.2.1
